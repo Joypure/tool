@@ -1,0 +1,1416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>文件上传小助手</title>
+  <style>
+    :root {
+      --bg-color: #f4f6f9;
+      --card-bg: #ffffff;
+      --primary: #007acc;
+      --primary-hover: #005999;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --text-main: #1f2937;
+      --text-sub: #6b7280;
+      --border: #e5e7eb;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      padding: 16px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 18px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+      border: 1px solid var(--border);
+    }
+
+    h2 { font-size: 1.1rem; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+    
+    .status-badge {
+      font-size: 0.75rem;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-weight: 600;
+      background-color: var(--border);
+      color: var(--text-sub);
+    }
+    .status-badge.connected { background-color: #d1fae5; color: #065f46; }
+    .status-badge.transferring { background-color: #fef3c7; color: #92400e; }
+
+    .btn {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      background-color: var(--primary);
+      color: white;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-top: 8px;
+    }
+    .btn:hover { background-color: var(--primary-hover); }
+    .btn:disabled { background-color: #cbd5e1; cursor: not-allowed; }
+    .btn-danger { background-color: var(--danger); }
+    .btn-danger:hover { background-color: #dc2626; }
+    .btn-secondary { background-color: #64748b; }
+    .btn-secondary:hover { background-color: #475569; }
+    .btn-sm { width: auto; padding: 8px 14px; margin-top: 0; margin-right: 8px; display: inline-block; }
+
+    .storage-row { font-size: 0.85rem; margin-bottom: 6px; color: var(--text-sub); }
+    .storage-bar {
+      height: 10px; border-radius: 6px; background: #e5e7eb; overflow: hidden;
+      display: flex; margin: 8px 0 4px;
+    }
+    .storage-bar .sys { background: #94a3b8; }
+    .storage-bar .tips { background: #007acc; }
+
+    .file-list {
+      max-height: 220px; overflow-y: auto; border: 1px solid var(--border);
+      border-radius: 8px; margin-bottom: 10px;
+    }
+    .file-item {
+      padding: 10px 12px; border-bottom: 1px solid var(--border);
+      font-size: 0.9rem; cursor: pointer;
+    }
+    .file-item:last-child { border-bottom: none; }
+    .file-item.selected { background: #e8f4fc; color: var(--primary); font-weight: 600; }
+    .file-item.empty { color: var(--text-sub); cursor: default; }
+
+    .input-group { margin-bottom: 12px; }
+    label { display: block; font-size: 0.85rem; color: var(--text-sub); margin-bottom: 6px; }
+    input[type="file"], input[type="number"], select {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.9rem;
+    }
+
+    .progress-bar-bg {
+      width: 100%;
+      height: 12px;
+      background-color: var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      margin: 10px 0;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background-color: var(--primary);
+      transition: width 0.1s linear;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      font-size: 0.8rem;
+      color: var(--text-sub);
+      background: #f8fafc;
+      padding: 10px;
+      border-radius: 6px;
+      margin-top: 8px;
+    }
+
+    /* 模拟日志控制台 */
+    .console-box {
+      background-color: #0f172a;
+      color: #38bdf8;
+      font-family: monospace;
+      font-size: 0.75rem;
+      height: 200px;
+      overflow-y: auto;
+      padding: 10px;
+      border-radius: 8px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .log-line { margin-bottom: 4px; }
+    .log-info { color: #38bdf8; }
+    .log-debug { color: #94a3b8; }
+    .log-warn { color: #fbbf24; }
+    .log-error { color: #f87171; }
+    .log-success { color: #4ade80; }
+
+    .banner-danger {
+      background: #fee2e2;
+      border: 1px solid #fca5a5;
+      color: #991b1b;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      line-height: 1.4;
+      margin-bottom: 12px;
+      display: none;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 8px;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="envAlert" class="banner-danger">
+    ⚠️ <strong>当前环境不支持 Web Bluetooth</strong><br>
+    • <strong>iOS (苹果手机)</strong>: Safari/Chrome 原生不支持蓝牙功能，请在 App Store 下载免费的 <strong>Bluefy - Web BLE Browser</strong> 或 <strong>WebBLE</strong> 浏览器打开本网页。<br>
+    • <strong>Android / PC</strong>: 请使用 <strong>Chrome / Edge</strong> 浏览器，并确保通过 <strong>HTTPS</strong> 或 <strong>localhost</strong> 访问。
+  </div>
+
+  <!-- 1. 连接状态卡片 -->
+  <div class="card">
+    <h2>
+      设备连接
+      <span id="statusBadge" class="status-badge">未连接</span>
+    </h2>
+    <div id="deviceInfo" style="font-size: 0.85rem; color: var(--text-sub); margin-bottom: 8px;">
+      注：如果没有发现设备，记得检查手机蓝牙是否开启哦！
+    </div>
+    <div class="btn-group">
+      <button id="btnConnect" class="btn">搜索并连接设备</button>
+      <button id="btnDisconnect" class="btn btn-secondary" style="display: none;">断开连接</button>
+    </div>
+  </div>
+
+  <!-- 存储占用 -->
+  <div class="card">
+    <h2>存储占用
+      <button id="btnPlayMode" class="btn btn-sm btn-secondary" disabled
+  style="width:auto; margin-top:0;">随机播放</button>
+    </h2>
+    <div class="storage-row">系统内存: <strong id="lblSysUsed">-</strong></div>
+    <div class="storage-row">用户上传文件占用内存: <strong id="lblTipsUsed">-</strong></div>
+    <div class="storage-bar">
+      <div id="barSys" class="sys" style="width:0%"></div>
+      <div id="barTips" class="tips" style="width:0%"></div>
+    </div>
+    <div class="storage-row">总量: <span id="lblFsTotal">-</span> · 剩余: <span id="lblFsFree">-</span></div>
+  </div>
+
+  <!-- 文件列表 -->
+  <div class="card">
+    <h2>运动提示音文件</h2>
+    <div id="fileList" class="file-list">
+      <div class="file-item empty">连接设备后显示文件名</div>
+    </div>
+    <button id="btnPreview" class="btn btn-sm btn-secondary" disabled>预览</button>
+    <button id="btnDelete" class="btn btn-sm btn-danger" disabled>删除</button>
+    <button id="btnRefreshFs" class="btn btn-sm btn-secondary" disabled>刷新</button>
+  </div>
+
+  <!-- 2. 文件选择与传输卡片 -->
+  <div class="card">
+    <h2>文件推送 (MAX 512KB)</h2>
+    <div class="input-group" style="display:flex; gap:12px; flex-wrap:wrap;">
+      <div style="flex:1; min-width:120px;">
+        <label>类型</label>
+        <select id="selKind">
+          <option value="gear">档位提示音</option>
+          <option value="a">姿势提示音： 正面进入 (a)</option>
+          <option value="b">姿势提示音： 背面进入 (b)</option>
+          <option value="c">姿势提示音： 改变体位 (c)</option>
+        </select>
+      </div>
+      <div style="flex:1; min-width:100px;" id="wrapGear">
+        <label>档位 (1~5)</label>
+        <select id="selGear">
+          <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+          <option value="4">4</option><option value="5">5</option>
+        </select>
+      </div>
+      <div style="flex:1; min-width:100px;">
+        <label>音频序号</label>
+        <input type="number" id="selSlot" value="1" min="1" step="1">
+      </div>
+    </div>
+    <div class="storage-row">目标文件名: <code id="lblTargetName">1_1.wav</code></div>
+    <div class="input-group">
+      <label>选择音频文件 (自动处理并支持多次下发)</label>
+      <input type="file" id="fileInput" accept="audio/*,.mp3,.wav,.m4a,.aac,.caf" disabled>
+    </div>
+
+    <!-- 处理后音频预览 -->
+    <audio id="audioPreview" controls style="display:none; width:100%; margin-bottom:12px; height: 36px;"></audio>
+
+    <div class="input-group">
+      <label>单包大小 (加大此值会增大传输失败概率，建议 ≤500)</label>
+      <input type="number" id="chunkSizeInput" value="500" min="20" max="500">
+    </div>
+
+    <div id="fileDetails" class="info-grid" style="display: none;">
+      <div>处理后大小: <span id="lblSize">0 B</span></div>
+      <div>CRC32: <span id="lblCrc">0x00000000</span></div>
+    </div>
+
+    <button id="btnSend" class="btn" disabled>开始下发文件</button>
+    <button id="btnAbort" class="btn btn-danger" style="display: none;">取消本次传输</button>
+
+    <!-- 传输进度区 -->
+    <div id="progressSection" style="display: none; margin-top: 14px;">
+      <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
+        <span id="lblProgressPercent">0%</span>
+        <span id="lblSpeed">0 KB/s</span>
+      </div>
+      <div class="progress-bar-bg">
+        <div id="progressBar" class="progress-bar-fill"></div>
+      </div>
+      <div style="font-size: 0.75rem; color: var(--text-sub); text-align: right;" id="lblProgressBytes">0 / 0 B</div>
+    </div>
+  </div>
+
+  <!-- 3. 实时终端日志 -->
+  <div class="card">
+    <h2>双端排查日志</h2>
+    <div id="consoleBox" class="console-box"></div>
+  </div>
+
+<script>
+/**
+ * 对应固件协议与常量定义 (beken_genie jx_ble_file)
+ * Bluefy/iOS：必须用完整 128-bit 小写 UUID，禁止 0xFFF0 短号。
+ */
+const CONFIG = {
+  SERVICE_UUID: '0000fff0-0000-1000-8000-00805f9b34fb',
+  CTRL_UUID:    '0000fff1-0000-1000-8000-00805f9b34fb',
+  DATA_UUID:    '0000fff2-0000-1000-8000-00805f9b34fb',
+  MAX_FILE_SIZE: 512 * 1024, // 512KB
+  DEVICE_NAME:  'BF_FILE',
+  ACK_TIMEOUT_MS: 4000,
+  /* CoreBluetooth/Bluefy：GATT 步骤间延时，避免连发指令被丢 */
+  GATT_STEP_DELAY_MS: 500,
+  /* 等设备在 CCC 后主动推 FS_INFO；超时再提示手动刷新 */
+  FS_INFO_WAIT_MS: 4000,
+  WRITE_TIMEOUT_MS: 3000,
+  /* 与固件 JX_BLE_FILE_BATCH_N 对应；改 N 只改此处（START 会下发给设备） */
+  BATCH_N: 8,
+  BATCH_RETRY: 3,
+  CMD_QUERY: 0x10,
+  CMD_DEL: 0x11,
+  CMD_PLAY: 0x12,
+  CMD_SET_PLAY_MODE: 0x13,
+  CMD_FS_INFO: 0x20,
+  CMD_FILE_LIST: 0x21,
+  CMD_OP_RESULT: 0x22,
+  OP_DEL: 1,
+  OP_PLAY: 2,
+  OP_PLAY_MODE: 3,
+  PLAY_MODE_RANDOM: 0,
+  PLAY_MODE_SEQ: 1,
+};
+
+function sleepMs(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} 超时 ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
+function hexBytes(u8, max = 16) {
+  if (!u8 || !u8.length) return '';
+  const n = Math.min(u8.length, max);
+  let s = '';
+  for (let i = 0; i < n; i++) {
+    s += (u8[i] < 16 ? '0' : '') + u8[i].toString(16) + (i + 1 < n ? ' ' : '');
+  }
+  return u8.length > max ? `${s}...` : s;
+}
+
+function charProps(c) {
+  try {
+    const p = c && c.properties ? c.properties : {};
+    return `read=${!!p.read} write=${!!p.write} wrNoRsp=${!!p.writeWithoutResponse} ntf=${!!p.notify} ind=${!!p.indicate}`;
+  } catch (e) {
+    return `props_err=${e.message || e}`;
+  }
+}
+
+/**
+ * 统一成小写完整 128-bit UUID。
+ * Bluefy/CoreBluetooth 常返回短号如 "fff1"，需映射为
+ * 0000fff1-0000-1000-8000-00805f9b34fb 再比较。
+ */
+function normalizeBleUuid(u) {
+  if (u == null) return '';
+  let s = String(u).trim().toLowerCase();
+  if (s.startsWith('0x')) {
+    s = s.slice(2);
+  }
+  /* 已是 128-bit */
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(s)) {
+    return s;
+  }
+  /* 16-bit：fff1 / fff1 */
+  if (/^[0-9a-f]{4}$/.test(s)) {
+    return `0000${s}-0000-1000-8000-00805f9b34fb`;
+  }
+  /* 32-bit：0000fff1 */
+  if (/^[0-9a-f]{8}$/.test(s)) {
+    return `${s}-0000-1000-8000-00805f9b34fb`;
+  }
+  return s;
+}
+
+function findCharacteristicByUuid(chars, wantUuid) {
+  const want = normalizeBleUuid(wantUuid);
+  return chars.find((c) => normalizeBleUuid(c.uuid) === want) || null;
+}
+
+function formatBytes(n) {
+  if (n == null || isNaN(n)) return '-';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+const ERR_MAP = {
+  1: '文件大小非法 (超限或为0)',
+  2: '文件名非法 (含路径分隔符或超长)',
+  3: '序号错误 (Seq 不匹配)',
+  4: 'CRC32 校验失败',
+  5: '状态错误 (设备未准备好接收)',
+  6: '设备 Heap 内存不足',
+  7: 'Flash 落盘 IO 失败',
+  8: '传输中断开'
+};
+
+/**
+ * 标准日志封装类
+ */
+class BleLogger {
+  static consoleBox = document.getElementById('consoleBox');
+
+  static logToUI(msg, level = 'info') {
+    const line = document.createElement('div');
+    line.className = `log-line log-${level}`;
+    const time = new Date().toISOString().split('T')[1].slice(0, 12);
+    line.textContent = `[${time}] ${msg}`;
+    this.consoleBox.appendChild(line);
+    this.consoleBox.scrollTop = this.consoleBox.scrollHeight;
+  }
+
+  static info(msg, ...args) {
+    console.info(`%c[BLE-File-H5][INFO] ${msg}`, 'color: #007acc; font-weight: bold;', ...args);
+    this.logToUI(`[INFO] ${msg}`, 'info');
+  }
+
+  static debug(msg, ...args) {
+    console.debug(`[BLE-File-H5][DEBUG] ${msg}`, ...args);
+    this.logToUI(`[DEBUG] ${msg}`, 'debug');
+  }
+
+  static warn(msg, ...args) {
+    console.warn(`%c[BLE-File-H5][WARN] ${msg}`, 'color: #d97706; font-weight: bold;', ...args);
+    this.logToUI(`[WARN] ${msg}`, 'warn');
+  }
+
+  static error(msg, ...args) {
+    console.error(`%c[BLE-File-H5][ERROR] ${msg}`, 'color: #dc2626; font-weight: bold;', ...args);
+    this.logToUI(`[ERROR] ${msg}`, 'error');
+  }
+
+  static success(msg) {
+    console.info(`%c[BLE-File-H5][SUCCESS] ${msg}`, 'color: #10b981; font-weight: bold;');
+    this.logToUI(`[SUCCESS] ${msg}`, 'success');
+  }
+
+  static step(id, msg) {
+    this.info(`[${id}] ${msg}`);
+  }
+}
+
+/**
+ * CRC32 计算实现
+ */
+const CRC32_TABLE = (() => {
+  let c;
+  const table = [];
+  for (let n = 0; n < 256; n++) {
+    c = n;
+    for (let k = 0; k < 8; k++) {
+      c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    table[n] = c;
+  }
+  return table;
+})();
+
+function calculateCRC32(uint8Array) {
+  let crc = 0 ^ (-1);
+  for (let i = 0; i < uint8Array.length; i++) {
+    crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ uint8Array[i]) & 0xFF];
+  }
+  return (crc ^ (-1)) >>> 0;
+}
+
+/**
+ * 传输管理器
+ */
+class BleFileTransfer {
+  constructor() {
+    this.device = null;
+    this.server = null;
+    this.ctrlChar = null;
+    this.dataChar = null;
+    
+    this.isTransferring = false;
+    this.abortRequested = false;
+    this.pendingAckResolver = null;
+    
+    this.selectedFile = null;
+    this.fileBuffer = null;
+    this.remoteFiles = [];
+    this.selectedRemoteName = null;
+    this.listFrags = {};
+    this.listFragCnt = 0;
+    this.pendingOpResolver = null;
+    this._fsInfoWait = null;
+    this._lastAck = null;
+    this.playMode = CONFIG.PLAY_MODE_RANDOM;
+
+    this.initUI();
+    this.checkEnvironment();
+  }
+
+  checkEnvironment() {
+    const isSupported = 'bluetooth' in navigator;
+    const isSecure = window.isSecureContext;
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    if (!isSupported || !isSecure) {
+      document.getElementById('envAlert').style.display = 'block';
+      if (isIOS) {
+        BleLogger.warn('检测到 iOS 系统。Safari 原生不支持 Web Bluetooth，请使用 Bluefy 浏览器。');
+      } else {
+        BleLogger.warn(`环境检查未通过。Bluetooth: ${isSupported}, SecureContext: ${isSecure}`);
+      }
+    } else {
+      BleLogger.info('Web Bluetooth 环境识别通过。');
+    }
+  }
+
+  initUI() {
+    this.btnConnect = document.getElementById('btnConnect');
+    this.btnDisconnect = document.getElementById('btnDisconnect');
+    this.btnSend = document.getElementById('btnSend');
+    this.btnAbort = document.getElementById('btnAbort');
+    this.fileInput = document.getElementById('fileInput');
+    this.statusBadge = document.getElementById('statusBadge');
+    this.audioPreview = document.getElementById('audioPreview');
+    
+    this.btnConnect.addEventListener('click', () => this.connectDevice());
+    this.btnDisconnect.addEventListener('click', () => this.disconnectDevice());
+    this.btnSend.addEventListener('click', () => this.startTransfer());
+    this.btnAbort.addEventListener('click', () => this.abortTransfer());
+    
+    this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
+
+    this.selKind = document.getElementById('selKind');
+    this.selGear = document.getElementById('selGear');
+    this.selSlot = document.getElementById('selSlot');
+    this.lblTargetName = document.getElementById('lblTargetName');
+    const wrapGear = document.getElementById('wrapGear');
+    const refreshName = (resolve = false) => {
+      if (resolve) this.resolveSlot();
+      this.lblTargetName.textContent = this.previewSlotName();
+      wrapGear.style.display = (this.selKind.value === 'gear') ? '' : 'none';
+      if (this.selectedFile && this.fileBuffer) {
+        this.selectedFile.name = this.lblTargetName.textContent;
+      }
+    };
+    this.selKind.addEventListener('change', () => refreshName(true));
+    this.selGear.addEventListener('change', () => refreshName(true));
+    this.selSlot.addEventListener('change', () => refreshName(true));
+    this.selSlot.addEventListener('blur', () => refreshName(true));
+    this.selSlot.addEventListener('input', () => refreshName(false));
+    refreshName(true);
+
+    document.getElementById('btnPreview').addEventListener('click', () => this.sendPlay());
+    document.getElementById('btnDelete').addEventListener('click', () => this.sendDelete());
+    document.getElementById('btnRefreshFs').addEventListener('click', async () => {
+      try {
+        await this.sendQuery();
+      } catch (e) {
+        BleLogger.error(`刷新失败: ${e.message || e}`);
+      }
+    });
+    this.btnPlayMode = document.getElementById('btnPlayMode');
+    this.syncPlayModeUI();
+    this.btnPlayMode.addEventListener('click', () => this.togglePlayMode());
+  }
+
+  syncPlayModeUI() {
+    if (!this.btnPlayMode) return;
+    this.btnPlayMode.textContent =
+      this.playMode === CONFIG.PLAY_MODE_SEQ ? '顺序播放' : '随机播放';
+  }
+
+  applyPlayModeFromDevice(mode) {
+    if (mode === CONFIG.PLAY_MODE_RANDOM || mode === CONFIG.PLAY_MODE_SEQ) {
+      this.playMode = mode;
+      this.syncPlayModeUI();
+      BleLogger.info(`播放模式同步: ${mode === CONFIG.PLAY_MODE_SEQ ? '顺序' : '随机'} (${mode})`);
+    }
+  }
+
+  async togglePlayMode() {
+    if (!this.ctrlChar || !this.gattConnected()) {
+      BleLogger.warn('未连接，无法切换播放模式');
+      return;
+    }
+    const next = this.playMode === CONFIG.PLAY_MODE_SEQ
+      ? CONFIG.PLAY_MODE_RANDOM
+      : CONFIG.PLAY_MODE_SEQ;
+    const prev = this.playMode;
+    this.btnPlayMode.disabled = true;
+    try {
+      const p = this.waitOpResult();
+      await this.writeCtrlBytes(
+        new Uint8Array([CONFIG.CMD_SET_PLAY_MODE, next]),
+        `SET_PLAY_MODE ${next}`
+      );
+      const r = await p;
+      if (r.op !== CONFIG.OP_PLAY_MODE || r.err !== 0) {
+        throw new Error(`SET_PLAY_MODE 失败 err=${r.err}`);
+      }
+      this.playMode = next;
+      this.syncPlayModeUI();
+      BleLogger.success(`已切换为${next === CONFIG.PLAY_MODE_SEQ ? '顺序' : '随机'}播放`);
+    } catch (e) {
+      this.playMode = prev;
+      this.syncPlayModeUI();
+      BleLogger.error(`切换播放模式失败: ${e.message || e}`);
+    } finally {
+      this.btnPlayMode.disabled = !this.gattConnected();
+    }
+  }
+
+  /** 仅预览目标名；空/非法 M 显示为 ?，不回写输入框 */
+  previewSlotName() {
+    const raw = String(this.selSlot.value || '').trim();
+    const n = parseInt(raw, 10);
+    const slotLabel = (raw !== '' && Number.isFinite(n) && n >= 1) ? String(n) : '?';
+    if (this.selKind.value === 'gear') {
+      return `${this.selGear.value}_${slotLabel}.wav`;
+    }
+    return `${this.selKind.value}_${slotLabel}.wav`;
+  }
+  /** 校正 M ≥ 1 并写回输入框；返回可用槽位号 */
+  resolveSlot() {
+    const slot = Math.max(1, parseInt(this.selSlot.value, 10) || 1);
+    this.selSlot.value = String(slot);
+    return slot;
+  }
+  /** 下发/选文件前：校正 M 并返回最终目标名 */
+  targetSlotName() {
+    const slot = this.resolveSlot();
+    if (this.selKind.value === 'gear') {
+      return `${this.selGear.value}_${slot}.wav`;
+    }
+    return `${this.selKind.value}_${slot}.wav`;
+  }
+
+  updateStatus(state, text) {
+    this.statusBadge.textContent = text;
+    this.statusBadge.className = 'status-badge';
+    if (state === 'connected') this.statusBadge.classList.add('connected');
+    if (state === 'transferring') this.statusBadge.classList.add('transferring');
+  }
+
+  gattConnected() {
+    try {
+      return !!(this.device && this.device.gatt && this.device.gatt.connected);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async connectDevice() {
+    const stepDelay = CONFIG.GATT_STEP_DELAY_MS;
+    const t0 = Date.now();
+    const dt = () => Date.now() - t0;
+    try {
+      BleLogger.step('W1-PICK', `requestDevice name="${CONFIG.DEVICE_NAME}"`);
+
+      this.device = await navigator.bluetooth.requestDevice({
+        filters: [{ name: CONFIG.DEVICE_NAME }],
+        /* Bluefy：仅声明完整 128-bit 小写 UUID */
+        optionalServices: [CONFIG.SERVICE_UUID]
+      });
+
+      BleLogger.step('W1-PICK', `ok name="${this.device.name}" dt=${dt()}ms`);
+
+      this.device.addEventListener('gattserverdisconnected', (e) => this.onDisconnected(e));
+
+      BleLogger.step('W2-GATT', 'gatt.connect() ...');
+      this.server = await this.device.gatt.connect();
+      BleLogger.step('W2-GATT', `ok connected=${this.gattConnected()} dt=${dt()}ms`);
+
+      BleLogger.step('W2-GATT', `sleep ${stepDelay}ms before getPrimaryService`);
+      await sleepMs(stepDelay);
+
+      BleLogger.step('W3-SVC', `getPrimaryService connected=${this.gattConnected()}`);
+      const service = await this.server.getPrimaryService(CONFIG.SERVICE_UUID);
+      BleLogger.step('W3-SVC', `ok uuid=${normalizeBleUuid(service.uuid)} dt=${dt()}ms`);
+
+      BleLogger.step('W3-SVC', `sleep ${stepDelay}ms before getCharacteristics`);
+      await sleepMs(stepDelay);
+
+      BleLogger.step('W4-CHAR', `getCharacteristics() connected=${this.gattConnected()}`);
+      const chars = await service.getCharacteristics();
+      chars.forEach((c, i) => {
+        BleLogger.step('W4-CHAR', `#${i} raw=${c.uuid} norm=${normalizeBleUuid(c.uuid)} ${charProps(c)}`);
+      });
+
+      this.ctrlChar = findCharacteristicByUuid(chars, CONFIG.CTRL_UUID);
+      this.dataChar = findCharacteristicByUuid(chars, CONFIG.DATA_UUID);
+      if (!this.ctrlChar) {
+        throw new Error(`未找到 CTRL 特征 ${CONFIG.CTRL_UUID}`);
+      }
+      if (!this.dataChar) {
+        throw new Error(`未找到 DATA 特征 ${CONFIG.DATA_UUID}`);
+      }
+      BleLogger.step('W4-CHAR', `CTRL ${charProps(this.ctrlChar)}`);
+      BleLogger.step('W4-CHAR', `DATA ${charProps(this.dataChar)}`);
+
+      BleLogger.step('W5-NTF', `sleep ${stepDelay}ms before startNotifications`);
+      await sleepMs(stepDelay);
+
+      this.ctrlChar.addEventListener('characteristicvaluechanged', (e) => this.handleCtrlNotify(e));
+      const fsWait = this.waitFsInfo(CONFIG.FS_INFO_WAIT_MS);
+
+      const tNtf = Date.now();
+      BleLogger.step('W5-NTF', `startNotifications() begin connected=${this.gattConnected()}`);
+      await this.ctrlChar.startNotifications();
+      BleLogger.step('W5-NTF', `startNotifications() done dt=${Date.now() - tNtf}ms connected=${this.gattConnected()}`);
+
+      this.updateStatus('connected', '已连接');
+      this.btnConnect.style.display = 'none';
+      this.btnDisconnect.style.display = 'block';
+      this.fileInput.disabled = false;
+      document.getElementById('btnRefreshFs').disabled = false;
+      if (this.btnPlayMode) this.btnPlayMode.disabled = false;
+      BleLogger.success(`[W5-NTF] GATT 就绪，等设备 CCC 后推 FS_INFO (total ${dt()}ms)`);
+
+      BleLogger.step('W6-WAIT', `wait FS_INFO timeout=${CONFIG.FS_INFO_WAIT_MS}ms`);
+      const got = await fsWait;
+      if (got) {
+        BleLogger.success(`[W6-WAIT] 收到 FS_INFO total=${dt()}ms`);
+      } else {
+        BleLogger.warn(`[W6-WAIT] 未收到 FS_INFO total=${dt()}ms connected=${this.gattConnected()}，可点刷新`);
+      }
+
+    } catch (err) {
+      BleLogger.error(`[Wx-FAIL] 连接失败 dt=${dt()}ms connected=${this.gattConnected()}: ${err.message || err}`);
+      this.updateStatus('disconnected', '连接失败');
+    }
+  }
+
+  disconnectDevice() {
+    BleLogger.info('用户主动断开连接（仅此操作会断 BLE）...');
+    if (this.device && this.device.gatt && this.device.gatt.connected) {
+      this.device.gatt.disconnect();
+    } else {
+      this.onDisconnected(null);
+    }
+  }
+
+  onDisconnected(event) {
+    BleLogger.warn(`[W7-DISC] GATT 断开 transferring=${this.isTransferring} type=${event && event.type ? event.type : '-'}`);
+    this.updateStatus('disconnected', '未连接');
+    this.btnConnect.style.display = 'block';
+    this.btnDisconnect.style.display = 'none';
+    this.fileInput.disabled = true;
+    this.btnSend.disabled = true;
+    document.getElementById('btnRefreshFs').disabled = true;
+    document.getElementById('btnPreview').disabled = true;
+    document.getElementById('btnDelete').disabled = true;
+    if (this.btnPlayMode) this.btnPlayMode.disabled = true;
+    this.selectedRemoteName = null;
+    this.remoteFiles = [];
+    this.renderFileList();
+
+    /* 仅传输进行中的 pending ACK 判失败；传完后再断不算失败 */
+    if (this.isTransferring && this.pendingAckResolver) {
+      this.pendingAckResolver.reject(new Error('ERR_DISCONNECTED'));
+      this.pendingAckResolver = null;
+    }
+    if (this._fsInfoWait) {
+      clearTimeout(this._fsInfoWait.timer);
+      this._fsInfoWait.resolve(false);
+      this._fsInfoWait = null;
+    }
+  }
+
+  /**
+   * iOS 兼容的纯 JS 音频处理 (重采样至 16000Hz 单声道 16-bit WAV)
+   */
+  async processAudioToWav(file) {
+    BleLogger.info(`开始预处理音频文件: "${file.name}"...`);
+    const arrayBuffer = await file.arrayBuffer();
+    
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) {
+      throw new Error('当前浏览器不支持 Web Audio API');
+    }
+    
+    const audioCtx = new AudioCtx();
+    if (audioCtx.state === 'suspended') {
+      await audioCtx.resume();
+    }
+
+    // 兼容 iOS 旧版 WebKit 的 decodeAudioData (支持 Promise 与 Callback)
+    const decodedBuffer = await new Promise((resolve, reject) => {
+      const res = audioCtx.decodeAudioData(
+        arrayBuffer,
+        (buf) => resolve(buf),
+        (err) => reject(err)
+      );
+      if (res && typeof res.then === 'function') {
+        res.then(resolve).catch(reject);
+      }
+    });
+
+    const srcSampleRate = decodedBuffer.sampleRate;
+    const targetSampleRate = 16000;
+    const maxDuration = 8.0; 
+    const actualDuration = Math.min(decodedBuffer.duration, maxDuration);
+
+    // 1. 转为单声道 (Mono) Float32Array
+    const numChannels = decodedBuffer.numberOfChannels;
+    const srcLength = Math.floor(actualDuration * srcSampleRate);
+    const monoSamples = new Float32Array(srcLength);
+
+    if (numChannels === 1) {
+      monoSamples.set(decodedBuffer.getChannelData(0).subarray(0, srcLength));
+    } else {
+      const channels = [];
+      for (let c = 0; c < numChannels; c++) {
+        channels.push(decodedBuffer.getChannelData(c));
+      }
+      for (let i = 0; i < srcLength; i++) {
+        let sum = 0;
+        for (let c = 0; c < numChannels; c++) {
+          sum += channels[c][i];
+        }
+        monoSamples[i] = sum / numChannels;
+      }
+    }
+
+    // 2. 纯 JS 线性插值算法重采样至 16000Hz (规避 iOS WebKit OfflineAudioContext 兼容 Bug)
+    const targetLength = Math.floor(actualDuration * targetSampleRate);
+    const resampledSamples = new Float32Array(targetLength);
+    const ratio = srcSampleRate / targetSampleRate;
+
+    for (let i = 0; i < targetLength; i++) {
+      const srcIdx = i * ratio;
+      const index1 = Math.floor(srcIdx);
+      const index2 = Math.min(index1 + 1, srcLength - 1);
+      const interpolation = srcIdx - index1;
+      resampledSamples[i] = monoSamples[index1] * (1 - interpolation) + monoSamples[index2] * interpolation;
+    }
+
+    // 3. 打包 16-Bit PCM WAV
+    const wavBuffer = this.encode16BitWav(resampledSamples, targetSampleRate);
+    
+    if (audioCtx.close) {
+      audioCtx.close();
+    }
+
+    return {
+      wavBuffer: new Uint8Array(wavBuffer),
+      duration: actualDuration
+    };
+  }
+
+  encode16BitWav(samples, sampleRate) {
+    const numChannels = 1;
+    const bytesPerSample = 2;
+    const blockAlign = numChannels * bytesPerSample;
+    const byteRate = sampleRate * blockAlign;
+    const dataSize = samples.length * bytesPerSample;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    this.writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    this.writeString(view, 8, 'WAVE');
+
+    this.writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, 16, true);
+
+    this.writeString(view, 36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    let offset = 44;
+    for (let i = 0; i < samples.length; i++, offset += 2) {
+      let s = Math.max(-1, Math.min(1, samples[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+
+    return buffer;
+  }
+
+  writeString(view, offset, string) {
+    for (let i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
+  }
+
+  async handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    this.btnSend.disabled = true;
+    document.getElementById('fileDetails').style.display = 'none';
+
+    try {
+      const { wavBuffer } = await this.processAudioToWav(file);
+      
+      this.fileBuffer = wavBuffer;
+      const crc32 = calculateCRC32(this.fileBuffer);
+
+      let targetName = this.targetSlotName();
+
+      this.selectedFile = {
+        name: targetName,
+        size: this.fileBuffer.length,
+        crc32: crc32
+      };
+
+      if (this.selectedFile.size > CONFIG.MAX_FILE_SIZE) {
+        BleLogger.error(`处理后的音频文件大小 (${this.selectedFile.size} B) 超过 512KB 限制!`);
+        alert('处理后的音频体积超出 512KB！');
+        return;
+      }
+
+      document.getElementById('lblSize').textContent = `${(this.selectedFile.size / 1024).toFixed(2)} KB (${this.selectedFile.size} B)`;
+      document.getElementById('lblCrc').textContent = `0x${crc32.toString(16).toUpperCase().padStart(8, '0')}`;
+      document.getElementById('fileDetails').style.display = 'grid';
+
+      const blob = new Blob([this.fileBuffer], { type: 'audio/wav' });
+      this.audioPreview.src = URL.createObjectURL(blob);
+      this.audioPreview.style.display = 'block';
+
+      BleLogger.success(`音频转换成功：${this.selectedFile.name} (${this.selectedFile.size}B)`);
+      this.btnSend.disabled = false;
+
+    } catch (err) {
+      BleLogger.error(`音频处理失败: ${err.message || err}`);
+      alert('音频处理失败，请更换格式重试。');
+    }
+  }
+
+  handleCtrlNotify(event) {
+    const raw = new Uint8Array(event.target.value.buffer);
+    const data = new DataView(event.target.value.buffer);
+    const cmd = data.getUint8(0);
+    BleLogger.step('W6-RX', `NTF len=${raw.length} cmd=0x${cmd.toString(16).padStart(2, '0')} hex=[${hexBytes(raw)}]`);
+
+    if (cmd === 0x02) { // ACK cum_seq
+      const seq = data.getUint32(1, false);
+      const ack = { type: 'ACK', seq: seq };
+      BleLogger.info(`[W6-RX] ACK cum=0x${seq.toString(16).toUpperCase()} (${seq})`);
+      if (this.pendingAckResolver) {
+        this.pendingAckResolver.resolve(ack);
+      } else {
+        /* iOS：Notify 可能早于 writeValue resolve，先暂存给随后的 waitForAck */
+        this._lastAck = ack;
+        BleLogger.info(`[W6-RX] ACK 暂存（waiter 尚未挂上）`);
+      }
+    } else if (cmd === 0x05) { // ERR，可选 expect_seq
+      const errCode = data.getUint8(1);
+      const errMsg = ERR_MAP[errCode] || `未知错误 (${errCode})`;
+      let expectSeq = null;
+      if (data.byteLength >= 6) {
+        expectSeq = data.getUint32(2, false);
+      }
+      BleLogger.error(`收到设备错误 -> Code: ${errCode} (${errMsg})` +
+        (expectSeq !== null ? `, expect=${expectSeq}` : ''));
+      if (this.pendingAckResolver) {
+        const err = new Error(`ERR_CODE_${errCode}: ${errMsg}`);
+        err.expectSeq = expectSeq;
+        err.errCode = errCode;
+        this.pendingAckResolver.reject(err);
+      }
+    } else if (cmd === CONFIG.CMD_FS_INFO) {
+      if (data.byteLength < 13) {
+        BleLogger.warn(`[W6-RX] FS_INFO 过短 len=${data.byteLength}`);
+        return;
+      }
+      const tips = data.getUint32(1, false);
+      const sys = data.getUint32(5, false);
+      const total = data.getUint32(9, false);
+      this.updateStorageUI(tips, sys, total);
+      if (data.byteLength >= 14) {
+        this.applyPlayModeFromDevice(data.getUint8(13));
+      }
+      BleLogger.info(`FS_INFO tips=${tips} sys=${sys} total=${total}` +
+        (data.byteLength >= 14 ? ` mode=${data.getUint8(13)}` : ''));
+      if (this._fsInfoWait) {
+        clearTimeout(this._fsInfoWait.timer);
+        const w = this._fsInfoWait;
+        this._fsInfoWait = null;
+        w.resolve(true);
+      }
+    } else if (cmd === CONFIG.CMD_FILE_LIST) {
+      if (data.byteLength < 3) return;
+      const fragIdx = data.getUint8(1);
+      const fragCnt = data.getUint8(2);
+      const payload = new Uint8Array(event.target.value.buffer, 3);
+      this.listFragCnt = fragCnt;
+      this.listFrags[fragIdx] = payload;
+      BleLogger.debug(`FILE_LIST frag ${fragIdx + 1}/${fragCnt} len=${payload.length}`);
+      if (Object.keys(this.listFrags).length >= fragCnt) {
+        this.finishFileList();
+      }
+    } else if (cmd === CONFIG.CMD_OP_RESULT) {
+      if (data.byteLength < 3) return;
+      const op = data.getUint8(1);
+      const err = data.getUint8(2);
+      const opName = op === CONFIG.OP_DEL ? 'DEL'
+        : (op === CONFIG.OP_PLAY ? 'PLAY'
+          : (op === CONFIG.OP_PLAY_MODE ? 'PLAY_MODE' : `op${op}`));
+      if (err === 0) {
+        BleLogger.success(`${opName} 成功`);
+      } else {
+        BleLogger.error(`${opName} 失败 err=${err} (${ERR_MAP[err] || ''})`);
+      }
+      if (this.pendingOpResolver) {
+        this.pendingOpResolver.resolve({ op, err });
+        this.pendingOpResolver = null;
+      }
+    } else {
+      BleLogger.warn(`[W6-RX] 未知 Notify cmd=0x${cmd.toString(16)} len=${data.byteLength}`);
+    }
+  }
+
+  updateStorageUI(tips, sys, total) {
+    document.getElementById('lblTipsUsed').textContent = formatBytes(tips);
+    document.getElementById('lblSysUsed').textContent = formatBytes(sys);
+    document.getElementById('lblFsTotal').textContent = formatBytes(total);
+    const free = Math.max(0, total - tips - sys);
+    document.getElementById('lblFsFree').textContent = formatBytes(free);
+    const t = total > 0 ? total : 1;
+    document.getElementById('barSys').style.width = `${(sys / t) * 100}%`;
+    document.getElementById('barTips').style.width = `${(tips / t) * 100}%`;
+  }
+
+  finishFileList() {
+    const parts = [];
+    for (let i = 0; i < this.listFragCnt; i++) {
+      if (!this.listFrags[i]) {
+        BleLogger.warn(`FILE_LIST 缺分片 ${i}`);
+        this.listFrags = {};
+        return;
+      }
+      parts.push(this.listFrags[i]);
+    }
+    this.listFrags = {};
+    const totalLen = parts.reduce((s, p) => s + p.length, 0);
+    const buf = new Uint8Array(totalLen);
+    let off = 0;
+    for (const p of parts) {
+      buf.set(p, off);
+      off += p.length;
+    }
+    const names = [];
+    let i = 0;
+    while (i < buf.length) {
+      const nlen = buf[i++];
+      if (nlen === 0 || i + nlen > buf.length) break;
+      const name = new TextDecoder().decode(buf.subarray(i, i + nlen));
+      i += nlen;
+      names.push(name);
+    }
+    this.remoteFiles = names;
+    if (this.selectedRemoteName && !names.includes(this.selectedRemoteName)) {
+      this.selectedRemoteName = null;
+    }
+    this.renderFileList();
+    BleLogger.success(`文件列表 ${names.length} 个`);
+  }
+
+  renderFileList() {
+    const box = document.getElementById('fileList');
+    box.innerHTML = '';
+    if (!this.remoteFiles.length) {
+      const empty = document.createElement('div');
+      empty.className = 'file-item empty';
+      empty.textContent = '暂无自定义文件';
+      box.appendChild(empty);
+    } else {
+      this.remoteFiles.forEach((name) => {
+        const row = document.createElement('div');
+        row.className = 'file-item' + (name === this.selectedRemoteName ? ' selected' : '');
+        row.textContent = name;
+        row.addEventListener('click', () => {
+          this.selectedRemoteName = name;
+          this.renderFileList();
+          document.getElementById('btnPreview').disabled = false;
+          document.getElementById('btnDelete').disabled = false;
+        });
+        box.appendChild(row);
+      });
+    }
+    const has = !!this.selectedRemoteName;
+    document.getElementById('btnPreview').disabled = !has;
+    document.getElementById('btnDelete').disabled = !has;
+  }
+
+  waitFsInfo(timeoutMs) {
+    return new Promise((resolve) => {
+      if (this._fsInfoWait) {
+        clearTimeout(this._fsInfoWait.timer);
+        this._fsInfoWait.resolve(false);
+      }
+      const timer = setTimeout(() => {
+        this._fsInfoWait = null;
+        BleLogger.warn('[W6-WAIT] FS_INFO 等待超时');
+        resolve(false);
+      }, timeoutMs);
+      this._fsInfoWait = { resolve, timer };
+    });
+  }
+
+  async writeCtrlBytes(u8, label) {
+    const t = Date.now();
+    BleLogger.step('W8-TX', `${label} begin hex=[${hexBytes(u8)}] connected=${this.gattConnected()}`);
+    try {
+      await withTimeout(this.ctrlChar.writeValue(u8), CONFIG.WRITE_TIMEOUT_MS, label);
+      BleLogger.step('W8-TX', `${label} ok dt=${Date.now() - t}ms connected=${this.gattConnected()}`);
+    } catch (e) {
+      BleLogger.error(`[W8-TX] ${label} fail dt=${Date.now() - t}ms connected=${this.gattConnected()}: ${e.message || e}`);
+      throw e;
+    }
+  }
+
+  async sendQuery() {
+    if (!this.ctrlChar) {
+      BleLogger.warn('[W8-TX] QUERY skip: ctrlChar 空');
+      return;
+    }
+    this.listFrags = {};
+    await this.writeCtrlBytes(new Uint8Array([CONFIG.CMD_QUERY]), 'QUERY write');
+  }
+
+  async writeNameCmd(cmd, name) {
+    const enc = new TextEncoder();
+    const nb = enc.encode(name);
+    const buf = new Uint8Array(2 + nb.length);
+    buf[0] = cmd;
+    buf[1] = nb.length;
+    buf.set(nb, 2);
+    await this.writeCtrlBytes(buf, `CTRL cmd=0x${cmd.toString(16)} name=${name}`);
+  }
+
+  waitOpResult(timeoutMs = 8000) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingOpResolver = null;
+        reject(new Error('等待 OP_RESULT 超时'));
+      }, timeoutMs);
+      this.pendingOpResolver = {
+        resolve: (r) => {
+          clearTimeout(timer);
+          resolve(r);
+        }
+      };
+    });
+  }
+
+  async sendDelete() {
+    if (!this.selectedRemoteName || !this.ctrlChar) return;
+    if (!confirm(`确认删除 ${this.selectedRemoteName}？`)) return;
+    try {
+      const p = this.waitOpResult();
+      await this.writeNameCmd(CONFIG.CMD_DEL, this.selectedRemoteName);
+      const r = await p;
+      if (r.err !== 0) alert(`删除失败 err=${r.err}`);
+    } catch (e) {
+      BleLogger.error(e.message || e);
+    }
+  }
+
+  async sendPlay() {
+    if (!this.selectedRemoteName || !this.ctrlChar) return;
+    try {
+      const p = this.waitOpResult();
+      await this.writeNameCmd(CONFIG.CMD_PLAY, this.selectedRemoteName);
+      const r = await p;
+      if (r.err !== 0) alert(`预览失败 err=${r.err}`);
+    } catch (e) {
+      BleLogger.error(e.message || e);
+    }
+  }
+
+  ackMatches(expectedSeq, seq) {
+    return seq === expectedSeq ||
+      (expectedSeq !== 0xFFFFFFFF && seq >= expectedSeq);
+  }
+
+  waitForAck(expectedSeq, timeoutMs = CONFIG.ACK_TIMEOUT_MS) {
+    if (this._lastAck && this.ackMatches(expectedSeq, this._lastAck.seq)) {
+      const a = this._lastAck;
+      this._lastAck = null;
+      BleLogger.info(`[W6-RX] 使用暂存 ACK cum=0x${a.seq.toString(16).toUpperCase()}`);
+      return Promise.resolve(a);
+    }
+    this._lastAck = null;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingAckResolver = null;
+        reject(new Error(`等待 ACK 超时 (seq: 0x${expectedSeq.toString(16)})`));
+      }, timeoutMs);
+
+      this.pendingAckResolver = {
+        resolve: (res) => {
+          if (this.ackMatches(expectedSeq, res.seq)) {
+            clearTimeout(timer);
+            this.pendingAckResolver = null;
+            resolve(res);
+          } else {
+            BleLogger.warn(`忽略未达预期的 ACK cum=${res.seq}, 预期>=${expectedSeq}`);
+          }
+        },
+        reject: (err) => {
+          clearTimeout(timer);
+          this.pendingAckResolver = null;
+          reject(err);
+        }
+      };
+    });
+  }
+
+  /** 先挂 ACK 等待再写 CTRL，兼容 iOS Notify 早到；安卓仍是 Write 后再收到 ACK */
+  async writeCtrlWaitAck(u8, label, expectedSeq, timeoutMs = 5000) {
+    const ackP = this.waitForAck(expectedSeq, timeoutMs);
+    try {
+      await this.writeCtrlBytes(u8, label);
+    } catch (e) {
+      if (this.pendingAckResolver) {
+        this.pendingAckResolver.reject(e);
+      }
+      throw e;
+    }
+    return ackP;
+  }
+
+  /**
+   * 写入 BLE 数据包（带 iOS 兼容降级）
+   */
+  async writeDataChunk(dataPacket) {
+    if (this.dataChar.writeValueWithoutResponse) {
+      await this.dataChar.writeValueWithoutResponse(dataPacket);
+    } else if (this.dataChar.writeValue) {
+      await this.dataChar.writeValue(dataPacket);
+    } else {
+      await this.dataChar.writeValueWithResponse(dataPacket);
+    }
+  }
+
+  buildDataPacket(seq, payloadSize) {
+    const startIdx = seq * payloadSize;
+    const endIdx = Math.min(startIdx + payloadSize, this.selectedFile.size);
+    const chunkPayload = this.fileBuffer.subarray(startIdx, endIdx);
+    const dataPacket = new Uint8Array(4 + chunkPayload.length);
+    const dataView = new DataView(dataPacket.buffer);
+    dataView.setUint32(0, seq, false);
+    dataPacket.set(chunkPayload, 4);
+    return { dataPacket, endIdx, plen: chunkPayload.length };
+  }
+
+  async startTransfer() {
+    if (!this.selectedFile || !this.fileBuffer) return;
+    if (!this.device || !this.device.gatt || !this.device.gatt.connected) {
+      alert('请先连接设备');
+      return;
+    }
+    this.selectedFile.name = this.targetSlotName();
+
+    this.isTransferring = true;
+    this.abortRequested = false;
+    this._lastAck = null;
+    this.updateStatus('transferring', '传输中');
+    
+    this.btnSend.style.display = 'none';
+    this.btnAbort.style.display = 'block';
+    this.fileInput.disabled = true;
+    document.getElementById('progressSection').style.display = 'block';
+
+    const chunkSize = parseInt(document.getElementById('chunkSizeInput').value, 10) || 500;
+    const payloadSize = Math.max(1, chunkSize - 4);
+    const totalChunks = Math.ceil(this.selectedFile.size / payloadSize);
+    const batchN = Math.max(1, Math.min(32, CONFIG.BATCH_N | 0));
+    
+    const startTime = Date.now();
+
+    try {
+      const encoder = new TextEncoder();
+      const nameBytes = encoder.encode(this.selectedFile.name);
+      
+      const startBuffer = new ArrayBuffer(1 + 4 + 4 + 1 + nameBytes.length + 1);
+      const startView = new DataView(startBuffer);
+      
+      startView.setUint8(0, 0x01);
+      startView.setUint32(1, this.selectedFile.size, false);
+      startView.setUint32(5, this.selectedFile.crc32, false);
+      startView.setUint8(9, nameBytes.length);
+      new Uint8Array(startBuffer, 10).set(nameBytes);
+      startView.setUint8(10 + nameBytes.length, batchN);
+
+      BleLogger.step('W8-TX', `START name=${this.selectedFile.name} size=${this.selectedFile.size} BATCH_N=${batchN}`);
+      await this.writeCtrlWaitAck(new Uint8Array(startBuffer), 'START write', 0xFFFFFFFF, 5000);
+      BleLogger.info('已接收 START ACK (0xFFFFFFFF)');
+
+      let seq = 0;
+      while (seq < totalChunks) {
+        if (this.abortRequested) {
+          throw new Error('USER_ABORT');
+        }
+
+        const batchStart = seq;
+        const batchEnd = Math.min(seq + batchN, totalChunks) - 1;
+        let attempt = 0;
+        let batchOk = false;
+
+        while (!batchOk && attempt < CONFIG.BATCH_RETRY) {
+          attempt++;
+          try {
+            const ackP = this.waitForAck(batchEnd);
+            for (let s = batchStart; s <= batchEnd; s++) {
+              if (this.abortRequested) {
+                throw new Error('USER_ABORT');
+              }
+              const { dataPacket, endIdx, plen } = this.buildDataPacket(s, payloadSize);
+              if (s === batchStart || s === batchEnd || s % 20 === 0) {
+                BleLogger.debug(`发送 DATA ${s}/${totalChunks - 1} (${plen}B) batch ${batchStart}-${batchEnd} try=${attempt}`);
+              }
+              await this.writeDataChunk(dataPacket);
+              this.updateProgress(endIdx, this.selectedFile.size, startTime);
+            }
+            await ackP;
+            batchOk = true;
+            seq = batchEnd + 1;
+          } catch (e) {
+            if (this.pendingAckResolver) {
+              this.pendingAckResolver.reject(e);
+            }
+            if (e.message === 'USER_ABORT') {
+              throw e;
+            }
+            if (e.expectSeq != null && e.expectSeq >= batchStart && e.expectSeq <= batchEnd) {
+              BleLogger.warn(`缺口 expect=${e.expectSeq}，从缺口重发本批`);
+              seq = e.expectSeq;
+              break;
+            }
+            BleLogger.warn(`批次 ${batchStart}-${batchEnd} 失败 try=${attempt}: ${e.message}`);
+            if (attempt >= CONFIG.BATCH_RETRY) {
+              throw e;
+            }
+            seq = batchStart;
+          }
+        }
+        if (!batchOk && attempt >= CONFIG.BATCH_RETRY) {
+          throw new Error(`批次重试耗尽 (${batchStart}-${batchEnd})`);
+        }
+      }
+
+      const endBuffer = new ArrayBuffer(1 + 4);
+      const endView = new DataView(endBuffer);
+      endView.setUint8(0, 0x03);
+      endView.setUint32(1, this.selectedFile.crc32, false);
+
+      BleLogger.step('W8-TX', 'END write');
+      await this.writeCtrlWaitAck(new Uint8Array(endBuffer), 'END write', totalChunks - 1, 5000);
+
+      const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
+      const avgSpeed = ((this.selectedFile.size / 1024) / parseFloat(totalTime)).toFixed(2);
+
+      BleLogger.success(`发送成功! ${totalTime}s, ${avgSpeed} KB/s — 可继续下发，点「断开连接」才断 BLE`);
+      alert(`文件发送成功！\n耗时: ${totalTime} 秒\n平均速度: ${avgSpeed} KB/s\n可继续选择下一文件下发`);
+
+    } catch (err) {
+      if (err.message === 'USER_ABORT') {
+        BleLogger.warn('用户取消传输。');
+        await this.sendAbortCmd();
+      } else {
+        BleLogger.error(`传输失败: ${err.message || err}`);
+        alert(`传输失败: ${err.message || err}\n连接仍保持，可重试下发`);
+      }
+    } finally {
+      this.isTransferring = false;
+      this.btnSend.style.display = 'block';
+      this.btnAbort.style.display = 'none';
+      this.btnSend.disabled = true;
+      this.fileInput.disabled = false;
+      this.fileInput.value = '';
+      this.selectedFile = null;
+      this.fileBuffer = null;
+      if (this.device && this.device.gatt && this.device.gatt.connected) {
+        this.updateStatus('connected', '已连接 (可继续下发)');
+      }
+    }
+  }
+
+  updateProgress(sentBytes, totalBytes, startTime) {
+    const percent = ((sentBytes / totalBytes) * 100).toFixed(1);
+    const elapsedSec = (Date.now() - startTime) / 1000;
+    const speedKB = elapsedSec > 0 ? ((sentBytes / 1024) / elapsedSec).toFixed(1) : 0;
+
+    document.getElementById('progressBar').style.width = `${percent}%`;
+    document.getElementById('lblProgressPercent').textContent = `${percent}%`;
+    document.getElementById('lblProgressBytes').textContent = `${sentBytes} / ${totalBytes} B`;
+    document.getElementById('lblSpeed').textContent = `${speedKB} KB/s`;
+  }
+
+  async abortTransfer() {
+    this.abortRequested = true;
+  }
+
+  async sendAbortCmd() {
+    try {
+      const abortPacket = new Uint8Array([0x04, 0x00]);
+      BleLogger.info('向设备发送 ABORT 中止命令...');
+      await this.writeCtrlBytes(abortPacket, 'ABORT write');
+    } catch (e) {
+      BleLogger.error(`发送 ABORT 包失败: ${e.message}`);
+    }
+  }
+}
+
+// 启动应用
+window.addEventListener('DOMContentLoaded', () => {
+  window.bleApp = new BleFileTransfer();
+});
+</script>
+</body>
+</html>
