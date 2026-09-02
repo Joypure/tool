@@ -219,13 +219,13 @@
   <div class="card">
     <h2>文件推送 (MAX 512KB)</h2>
     <div class="input-group" style="display:flex; gap:12px; flex-wrap:wrap;">
-      <div style="flex:1; min-width:120px;">
-        <label>类型</label>
+      <div style="flex:1; min-width:120px; display:none;">
+        <label for="selKind">类型</label>
         <select id="selKind">
           <option value="gear">档位提示音</option>
-          <option value="a">姿势提示音： 正面进入 (a)</option>
-          <option value="b">姿势提示音： 背面进入 (b)</option>
-          <option value="c">姿势提示音： 改变体位 (c)</option>
+          <option value="a" hidden disabled>姿势提示音： 正面进入 (a)</option>
+          <option value="b" hidden disabled>姿势提示音： 背面进入 (b)</option>
+          <option value="c" hidden disabled>姿势提示音： 改变体位 (c)</option>
         </select>
       </div>
       <div style="flex:1; min-width:100px;" id="wrapGear">
